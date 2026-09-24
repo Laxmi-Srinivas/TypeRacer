@@ -5,26 +5,22 @@ export const DIFFICULTY_CONFIG: Record<
   RaceConfig
 > = {
   easy: {
-    enemySpeed: 0.12,
-    playerStep: 2.4,
-    wrongKeyPenalty: 0.5,
+    enemySpeed: 0.06,
+    wrongKeyPenalty: 0.02,
   },
 
   normal: {
-    enemySpeed: 0.2,
-    playerStep: 2,
-    wrongKeyPenalty: 1,
+    enemySpeed: 0.075,
+    wrongKeyPenalty: 0.025,
   },
 
   hard: {
-    enemySpeed: 0.35,
-    playerStep: 1.7,
-    wrongKeyPenalty: 1.5,
+    enemySpeed: 0.09,
+    wrongKeyPenalty: 0.03,
   },
 
   expert: {
-    enemySpeed: 0.55,
-    playerStep: 1.4,
-    wrongKeyPenalty: 2,
+    enemySpeed: 0.105,
+    wrongKeyPenalty: 0.035,
   },
 };
