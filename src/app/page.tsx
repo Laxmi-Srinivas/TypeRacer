@@ -1,7 +1,13 @@
-import Header from "@/components/Header"
+import Header from "@/components/Header";
 
 export default function Home() {
   return (
-    <Header title="TypeRacer"/>
+    <main>
+      <Header title="Typing Racer" />
+
+      <section>
+        <p>Type fast. Race faster.</p>
+      </section>
+    </main>
   );
 }
