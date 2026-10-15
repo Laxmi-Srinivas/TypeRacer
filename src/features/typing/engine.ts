@@ -5,25 +5,16 @@ import type {
 } from "@/types/game";
 
 const INITIAL_ENEMY_PROGRESS = -0.08;
-
-/**
- * The small overlap/gap at which the chaser is considered
- * to have caught the player.
- *
- * 0.03 = roughly 3% of the track.
- */
 const CATCH_DISTANCE = 0.03;
+const MAX_PROGRESS = 1;
 
-/**
- * Creates a brand-new race.
- */
 export function createRace(text: string): RaceState {
-  const characters: TypedCharacter[] = text
-    .split("")
-    .map((character) => ({
+  const characters: TypedCharacter[] = Array.from(text).map(
+    (character) => ({
       character,
       status: "pending",
-    }));
+    }),
+  );
 
   return {
     status: "idle",
@@ -37,28 +28,22 @@ export function createRace(text: string): RaceState {
   };
 }
 
-/**
- * Returns the player's current progress as a value from 0 to 1.
- */
 export function getPlayerProgress(state: RaceState): number {
-  if (state.characters.length === 0) {
-    return 1;
+  if (state.text.length === 0) {
+    return 0;
   }
 
   return Math.min(
-    state.currentIndex / state.characters.length,
-    1,
+    MAX_PROGRESS,
+    Math.max(0, state.currentIndex / state.text.length),
   );
 }
 
-/**
- * Processes a single keyboard input.
- */
 export function processKey(
   state: RaceState,
   key: string,
   config: RaceConfig,
-  now: number,
+  now: number = Date.now(),
 ): RaceState {
   if (state.status === "won" || state.status === "lost") {
     return state;
@@ -68,21 +53,26 @@ export function processKey(
     return handleBackspace(state);
   }
 
-  if (key.length !== 1) {
+  if (key.length !== 1 || state.text.length === 0) {
     return state;
   }
 
-  const currentCharacter = state.characters[state.currentIndex];
+  const startedAt = state.startedAt ?? now;
+  const status = "running" as const;
 
-  if (!currentCharacter) {
-    return state;
+  if (state.currentIndex >= state.text.length) {
+    return {
+      ...state,
+      status,
+      startedAt,
+    };
   }
 
-  const isStarting = state.status === "idle";
-  const isCorrect = key === currentCharacter.character;
+  const expectedCharacter = state.text[state.currentIndex];
+  const isCorrect = key === expectedCharacter;
 
   const characters: TypedCharacter[] = state.characters.map(
-    (character, index) => {
+    (character, index): TypedCharacter => {
       if (index !== state.currentIndex) {
         return character;
       }
@@ -94,39 +84,47 @@ export function processKey(
     },
   );
 
-  const nextIndex = state.currentIndex + 1;
-
-  let enemyProgress = state.enemyProgress;
-
   if (!isCorrect) {
-    enemyProgress += config.wrongKeyPenalty;
+    const enemyProgress = Math.min(
+      MAX_PROGRESS,
+      state.enemyProgress + Math.max(0, config.wrongKeyPenalty),
+    );
+
+    const nextState: RaceState = {
+      ...state,
+      status,
+      characters,
+      errorCount: state.errorCount + 1,
+      enemyProgress,
+      startedAt,
+    };
+
+    if (hasChaserCaughtPlayer(nextState)) {
+      return {
+        ...nextState,
+        status: "lost",
+      };
+    }
+
+    return nextState;
   }
+
+  const currentIndex = state.currentIndex + 1;
 
   const nextState: RaceState = {
     ...state,
-    status: isStarting ? "running" : state.status,
+    status:
+      currentIndex === state.text.length ? "won" : status,
     characters,
-    currentIndex: nextIndex,
-    correctCount: state.correctCount + (isCorrect ? 1 : 0),
-    errorCount: state.errorCount + (isCorrect ? 0 : 1),
-    enemyProgress,
-    startedAt: isStarting ? now : state.startedAt,
+    currentIndex,
+    correctCount: state.correctCount + 1,
+    startedAt,
   };
 
-  /*
-   * Finishing the text means the player crossed the finish line.
-   */
-  if (getPlayerProgress(nextState) >= 1) {
-    return {
-      ...nextState,
-      status: "won",
-    };
-  }
-
-  /*
-   * A wrong key may have allowed the chaser to catch the player.
-   */
-  if (hasChaserCaughtPlayer(nextState)) {
+  if (
+    nextState.status !== "won" &&
+    hasChaserCaughtPlayer(nextState)
+  ) {
     return {
       ...nextState,
       status: "lost",
@@ -136,27 +134,20 @@ export function processKey(
   return nextState;
 }
 
-/**
- * Advances the chaser according to elapsed time.
- */
 export function advanceEnemy(
   state: RaceState,
   config: RaceConfig,
   deltaMs: number,
 ): RaceState {
-  if (state.status !== "running") {
+  if (state.status !== "running" || deltaMs <= 0) {
     return state;
   }
 
-  if (deltaMs <= 0) {
-    return state;
-  }
-
-  const deltaSeconds = deltaMs / 1000;
-
-  const enemyProgress =
+  const enemyProgress = Math.min(
+    MAX_PROGRESS,
     state.enemyProgress +
-    config.enemySpeed * deltaSeconds;
+      (Math.max(0, config.enemySpeed) * deltaMs) / 1000,
+  );
 
   const nextState: RaceState = {
     ...state,
@@ -173,50 +164,70 @@ export function advanceEnemy(
   return nextState;
 }
 
-/**
- * Determines whether the chaser has reached the player.
- */
 export function hasChaserCaughtPlayer(
   state: RaceState,
 ): boolean {
-  const playerProgress = getPlayerProgress(state);
+  if (state.text.length === 0) {
+    return false;
+  }
 
   return (
-    state.enemyProgress + CATCH_DISTANCE >=
-    playerProgress
+    state.enemyProgress >=
+    getPlayerProgress(state) + CATCH_DISTANCE
   );
 }
 
-/**
- * Handles Backspace.
- *
- * An error that has already happened remains counted as an error.
- * Backspace only moves the typing cursor back and resets the
- * character's visual status.
- */
-function handleBackspace(state: RaceState): RaceState {
-  if (state.currentIndex === 0) {
+export function handleBackspace(state: RaceState): RaceState {
+  if (state.status !== "running") {
     return state;
   }
 
-  const previousIndex = state.currentIndex - 1;
+  const currentCharacter = state.characters[state.currentIndex];
 
-  const characters: TypedCharacter[] = state.characters.map(
-    (character, index) => {
-      if (index !== previousIndex) {
-        return character;
-      }
+  
+  if (currentCharacter?.status === "wrong") {
+    const characters = state.characters.map(
+      (character, index): TypedCharacter => {
+        if (index !== state.currentIndex) {
+          return character;
+        }
 
-      return {
-        ...character,
-        status: "pending",
-      };
-    },
-  );
+        return {
+          ...character,
+          status: "pending",
+        };
+      },
+    );
 
-  return {
-    ...state,
-    characters,
-    currentIndex: previousIndex,
-  };
+    return {
+      ...state,
+      characters,
+    };
+  }
+
+  
+  if (state.currentIndex > 0) {
+    const previousIndex = state.currentIndex - 1;
+
+    const characters = state.characters.map(
+      (character, index): TypedCharacter => {
+        if (index !== previousIndex) {
+          return character;
+        }
+
+        return {
+          ...character,
+          status: "pending",
+        };
+      },
+    );
+
+    return {
+      ...state,
+      characters,
+      currentIndex: previousIndex,
+    };
+  }
+
+  return state;
 }

@@ -15,15 +15,10 @@ export interface TypedCharacter {
 }
 
 export interface RaceConfig {
-  /**
-   * Chaser progress gained per second.
-   * Progress is represented from 0 to 1.
-   */
+
   enemySpeed: number;
 
-  /**
-   * Additional chaser progress gained from a wrong key.
-   */
+
   wrongKeyPenalty: number;
 }
 
@@ -37,16 +32,6 @@ export interface RaceState {
   correctCount: number;
   errorCount: number;
 
-  /**
-   * Chaser position on the race track.
-   *
-   * 0 = starting line
-   * 1 = finish line
-   */
   enemyProgress: number;
-
-  /**
-   * Timestamp when the first character was typed.
-   */
   startedAt: number | null;
 }
